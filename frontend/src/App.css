@@ -664,8 +664,7 @@
 
 /* Algorithms Explanation Refined */
 .bento-explanation-card {
-  flex: 1;
-  overflow-y: auto;
+  /* Grow naturally to avoid nested scrolling */
 }
 
 .bento-explanation-card h2 {
