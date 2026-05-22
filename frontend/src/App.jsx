@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import GraphVisualization from './components/GraphVisualization';
 import Controls from './components/Controls';
 import AlgorithmExplanation from './components/AlgorithmExplanation';
+import MetricsDashboard from './components/MetricsDashboard';
 import TopologySelector, { TOPOLOGIES } from './components/TopologySelector';
 import './App.css';
 
@@ -23,6 +24,20 @@ function App() {
   const [showPackets, setShowPackets] = useState(false);
   const [executionEngine, setExecutionEngine] = useState(null);
 
+  // Metrics state for MetricsDashboard
+  const [metrics, setMetrics] = useState(null);
+
+  // Tunable parameters
+  const [params, setParams] = useState({
+      alpha: 1.0,
+      beta: 2.0,
+      rho: 0.5,
+  });
+
+  const handleParamChange = (key, value) => {
+      setParams(prev => ({ ...prev, [key]: value }));
+  };
+
   const handleTopologyChange = (key, topo) => {
       setTopologyKey(key);
       setNodes(topo.nodes);
@@ -32,6 +47,7 @@ function App() {
       setIteration(0);
       setShowPackets(false);
       setStatus("Awaiting optimization initialization.");
+      setMetrics(null);
   };
 
   // Dynamically trace the path with highest pheromones from start to end
@@ -74,6 +90,7 @@ function App() {
       setLoading(true);
       setIteration(0);
       setShowPackets(false);
+      setMetrics(null);
       setStatus("Computing algorithmic iterations in native Engine...");
       try {
           const topo = TOPOLOGIES[topologyKey];
@@ -85,6 +102,9 @@ function App() {
                   edges: topo.edges.map(e => ({ from: e.from, to: e.to, weight: e.weight })),
                   start_node: topo.startNode,
                   dest_node: topo.destNode,
+                  alpha: params.alpha,
+                  beta: params.beta,
+                  rho: params.rho,
               })
           });
           const data = await response.json();
@@ -92,13 +112,28 @@ function App() {
           if(data.data.snapshots && data.data.snapshots.length > 0) {
              setStatus("Optimization complete.");
              
-             if (data.data.message) {
+             // Set execution engine from enriched response
+             const engine = data.data.engine;
+             if (engine) {
+                 setExecutionEngine(engine === 'CUDA' ? 'CUDA' : 'CPU');
+             } else if (data.data.message) {
                  if (data.data.message.toLowerCase().includes('cpu')) {
                      setExecutionEngine('CPU');
-                 } else if (data.data.message.toLowerCase().includes('numba gpu') || data.data.message.toLowerCase().includes('cuda')) {
+                 } else if (data.data.message.toLowerCase().includes('gpu') || data.data.message.toLowerCase().includes('cuda')) {
                      setExecutionEngine('CUDA');
                  }
              }
+
+             // Set metrics for dashboard
+             setMetrics({
+                 execution_time_ms: data.data.execution_time_ms,
+                 best_cost: data.data.best_cost,
+                 best_path: data.data.best_path,
+                 convergence: data.data.convergence,
+                 iterations_run: data.data.iterations_run,
+                 parameters: data.data.parameters,
+                 engine: data.data.engine,
+             });
 
              animateSnapshots(data.data.snapshots);
           } else {
@@ -190,11 +225,20 @@ function App() {
         {/* Right Sidebar Elements */}
         <div className="bento-sidebar">
             <div className="bento-card bento-control-card">
-                <Controls onOptimize={handleOptimize} loading={loading} />
+                <Controls 
+                    onOptimize={handleOptimize} 
+                    loading={loading} 
+                    params={params}
+                    onParamChange={handleParamChange}
+                />
                 <div className="status-indicator">
                     <span className={`status-dot ${loading ? 'pulsing' : 'idle'}`}></span>
                     <p>{status}</p>
                 </div>
+            </div>
+
+            <div className="bento-card bento-metrics-card">
+                <MetricsDashboard metrics={metrics} />
             </div>
 
             <div className="bento-card bento-explanation-card">

@@ -18,7 +18,7 @@ export const TOPOLOGIES = {
         destNode: 4,
     },
     star: {
-        name: 'Mesh',
+        name: 'Star',
         description: 'Hub-spoke network',
         icon: '✦',
         nodes: [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }],
@@ -67,7 +67,7 @@ export const TOPOLOGIES = {
         destNode: 3,
     },
     mesh: {
-        name: 'Star',
+        name: 'Mesh',
         description: 'Fully connected',
         icon: '⬡',
         nodes: [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],

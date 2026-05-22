@@ -1,6 +1,7 @@
 import os
 import sys
 import platform
+import time
 
 # ── Portable CUDA path setup ──────────────────────────────────────────
 # Docker (Linux): The nvidia/cuda base image already configures all paths.
@@ -38,7 +39,21 @@ import numpy as np
 import random
 import copy
 
-# Constants for ACO
+# ── Default ACO Parameters ────────────────────────────────────────────
+# α = 1.0  — Standard Dorigo value. Linear pheromone influence ensures
+#            balanced exploration without premature convergence.
+# β = 2.0  — Quadratic distance influence. Dorigo's experiments showed
+#            β=2 balances short-edge preference with exploration.
+# ρ = 0.5  — Moderate evaporation rate. Allows good paths to persist
+#            while still forgetting poor ones within ~5 iterations.
+# Q = 100  — Deposit constant. With typical path costs 10-50, deposit
+#            values of 2-10 balance against evaporation at ρ=0.5.
+DEFAULT_ALPHA = 1.0
+DEFAULT_BETA = 2.0
+DEFAULT_EVAPORATION_RATE = 0.5
+DEFAULT_Q = 100.0
+
+# ── CUDA Kernel Constants (must be compile-time for @cuda.jit) ────────
 ALPHA = 1.0
 BETA = 2.0
 EVAPORATION_RATE = 0.5
@@ -144,9 +159,29 @@ def format_edges(distances, pheromone_matrix, num_nodes):
                 })
     return edges
 
-def run_optimization(num_nodes=5, edges_data=None, start_node=0, dest_node=4):
-    num_ants = 32
-    iterations = 100
+def _extract_best_path(paths, path_lengths, path_costs, num_ants):
+    """Find the ant with the lowest valid path cost and return its path."""
+    best_cost = float('inf')
+    best_path = []
+    for k in range(num_ants):
+        if path_costs[k] > 0.0 and path_costs[k] < best_cost:
+            best_cost = float(path_costs[k])
+            best_path = [int(paths[k, i]) for i in range(int(path_lengths[k]))]
+    return best_cost, best_path
+
+def run_optimization(num_nodes=5, edges_data=None, start_node=0, dest_node=4,
+                     alpha=None, beta=None, rho=None, num_ants=32, iterations=100):
+    """
+    Run Ant Colony Optimization on the given graph.
+    
+    Returns an enriched result dict with execution metrics, convergence data,
+    and pheromone snapshots for visualization.
+    """
+    # Use provided parameters or defaults
+    _alpha = alpha if alpha is not None else DEFAULT_ALPHA
+    _beta = beta if beta is not None else DEFAULT_BETA
+    _rho = rho if rho is not None else DEFAULT_EVAPORATION_RATE
+    _q = DEFAULT_Q
     
     # Build dense distance matrix from edge list
     distances = np.full((num_nodes, num_nodes), -1.0, dtype=np.float32)
@@ -166,9 +201,19 @@ def run_optimization(num_nodes=5, edges_data=None, start_node=0, dest_node=4):
         distances[2, 1] = 1.0
         distances[3, 4] = 5.0
 
+    # Common result metadata
+    params = {
+        "alpha": _alpha,
+        "beta": _beta,
+        "rho": _rho,
+        "Q": _q,
+        "num_ants": num_ants,
+        "iterations": iterations
+    }
+
     try:
-        # Remove explicit cuda.is_available() check which can give false negatives
-        # Just try to allocate memory and run the kernel
+        # ── GPU Execution Path ────────────────────────────────────────
+        start_time = time.perf_counter()
             
         pheromones = np.full((num_nodes, num_nodes), 0.1, dtype=np.float32)
         
@@ -193,6 +238,10 @@ def run_optimization(num_nodes=5, edges_data=None, start_node=0, dest_node=4):
         )
         
         snapshots = []
+        convergence = []
+        global_best_cost = float('inf')
+        global_best_path = []
+        
         # Save initial state
         snapshots.append(format_edges(distances, pheromones, num_nodes))
 
@@ -209,17 +258,50 @@ def run_optimization(num_nodes=5, edges_data=None, start_node=0, dest_node=4):
             if iter_count % 10 == 0:
                 current_pheromones = d_pheromones.copy_to_host()
                 snapshots.append(format_edges(distances, current_pheromones, num_nodes))
+                
+                # Track convergence — extract best cost this iteration batch
+                h_paths = d_paths.copy_to_host()
+                h_path_lengths = d_path_lengths.copy_to_host()
+                h_path_costs = d_path_costs.copy_to_host()
+                
+                iter_best_cost, iter_best_path = _extract_best_path(
+                    h_paths, h_path_lengths, h_path_costs, num_ants
+                )
+                if iter_best_cost < global_best_cost:
+                    global_best_cost = iter_best_cost
+                    global_best_path = iter_best_path
+                
+                convergence.append(global_best_cost if global_best_cost < float('inf') else None)
+        
+        execution_time_ms = (time.perf_counter() - start_time) * 1000
                     
-        return {"mocked": False, "message": "Successfully executed using native Numba GPU kernels", "snapshots": snapshots}
+        return {
+            "mocked": False,
+            "engine": "CUDA",
+            "message": "Successfully executed using native Numba GPU kernels",
+            "execution_time_ms": round(execution_time_ms, 2),
+            "best_cost": global_best_cost if global_best_cost < float('inf') else None,
+            "best_path": global_best_path,
+            "convergence": convergence,
+            "iterations_run": iterations,
+            "parameters": params,
+            "snapshots": snapshots
+        }
         
     except Exception as e:
         import traceback
         with open('err_numba.txt', 'w') as f:
              f.write(traceback.format_exc())
              
-        # Fallback to CPU execution
+        # ── CPU Fallback Path ─────────────────────────────────────────
+        start_time = time.perf_counter()
+        
         pheromones = np.full((num_nodes, num_nodes), 0.1, dtype=np.float32)
         snapshots = []
+        convergence = []
+        global_best_cost = float('inf')
+        global_best_path = []
+        
         snapshots.append(format_edges(distances, pheromones, num_nodes))
         
         for iter_count in range(1, iterations + 1):
@@ -247,7 +329,7 @@ def run_optimization(num_nodes=5, edges_data=None, start_node=0, dest_node=4):
                         if dist > 0.0 and visited[j] == 0:
                             tau = pheromones[current_node, j]
                             eta = 1.0 / dist
-                            p = (tau ** ALPHA) * (eta ** BETA)
+                            p = (tau ** _alpha) * (eta ** _beta)
                             probs[j] = p
                             total_prob += p
                             valid_neighbors += 1
@@ -281,13 +363,13 @@ def run_optimization(num_nodes=5, edges_data=None, start_node=0, dest_node=4):
                 path_costs[k] = cost
                 
             # Evaporate
-            pheromones *= (1.0 - EVAPORATION_RATE)
+            pheromones *= (1.0 - _rho)
             
             # Deposit
             for k in range(num_ants):
                 if path_costs[k] > 0.0:
                     L = path_lengths[k]
-                    dt = Q / path_costs[k]
+                    dt = _q / path_costs[k]
                     for i in range(L - 1):
                         u = paths[k, i]
                         v = paths[k, i+1]
@@ -295,9 +377,28 @@ def run_optimization(num_nodes=5, edges_data=None, start_node=0, dest_node=4):
                         
             if iter_count % 10 == 0:
                 snapshots.append(format_edges(distances, pheromones, num_nodes))
+                
+                # Track convergence
+                iter_best_cost, iter_best_path = _extract_best_path(
+                    paths, path_lengths, path_costs, num_ants
+                )
+                if iter_best_cost < global_best_cost:
+                    global_best_cost = iter_best_cost
+                    global_best_path = iter_best_path
+                    
+                convergence.append(global_best_cost if global_best_cost < float('inf') else None)
+
+        execution_time_ms = (time.perf_counter() - start_time) * 1000
 
         return {
             "mocked": False,
+            "engine": "CPU",
             "message": "Successfully executed using CPU computing (No CUDA device found)",
+            "execution_time_ms": round(execution_time_ms, 2),
+            "best_cost": global_best_cost if global_best_cost < float('inf') else None,
+            "best_path": global_best_path,
+            "convergence": convergence,
+            "iterations_run": iterations,
+            "parameters": params,
             "snapshots": snapshots
         }
