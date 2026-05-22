@@ -25,7 +25,8 @@ const AlgorithmExplanation = () => {
                 </div>
                 <ul className="variables">
                     <li><strong>ρ (Rho)</strong>: Evaporation rate. <em><br/>Fades weak paths gradually.</em></li>
-                    <li><strong>Δτ (Delta)</strong>: Deposited pheromone (Q / TotalPathCost). <em><br/>Increases only for successful ants.</em></li>
+                    <li><strong>Δτ (Delta)</strong>: Deposited pheromone, calculated as <strong>Q / L</strong> (where L is the path cost).</li>
+                    <li><strong>Q (Constant)</strong>: Pheromone deposit scaling constant. Higher Q increases the amount of pheromone deposited by successful ants, reinforcing shorter paths more aggressively.</li>
                 </ul>
             </div>
             
