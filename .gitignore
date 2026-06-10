@@ -10,6 +10,9 @@ compute/bin/
 .DS_Store
 
 # Backend runtime artifacts
+err_numba.txt
+err.txt
+out.txt
 backend/err.txt
 backend/err_numba.txt
 backend/out.txt

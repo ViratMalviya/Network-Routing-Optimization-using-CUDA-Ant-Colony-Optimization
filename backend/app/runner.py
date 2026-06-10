@@ -9,7 +9,7 @@ import time
 if platform.system() == "Windows":
     cuda_root = os.environ.get(
         "CUDA_PATH",
-        r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2",
+        r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6",
     )
     if os.path.isdir(cuda_root):
         nvvm_bin = os.path.join(cuda_root, "nvvm", "bin", "x64")
