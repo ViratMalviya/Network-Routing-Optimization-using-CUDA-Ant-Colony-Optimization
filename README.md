@@ -1,4 +1,4 @@
-# NetOptima — Network Routing Optimization using CUDA Ant Colony Optimization
+# NetOptima - Network Routing Optimization using CUDA Ant Colony Optimization
 
 A real-time network routing optimization dashboard that uses **CUDA-accelerated Ant Colony Optimization (ACO)** to find optimal paths across various network topologies. Built with a Python/Numba GPU backend and a React visualization frontend.
 
@@ -6,13 +6,13 @@ A real-time network routing optimization dashboard that uses **CUDA-accelerated 
 
 ## Features
 
-- **GPU-Accelerated ACO** — Ant Colony Optimization compiled and executed on NVIDIA GPUs via Numba CUDA JIT. Falls back to CPU automatically if no GPU is available.
-- **Execution Engine Indicator** — A real-time UI badge prominently displays whether the backend executed using `⚡ GPU Accelerated` native kernels or `🖥️ CPU Fallback`.
-- **Multiple Network Topologies** — Choose from 6 preset topologies: Default, Star, Ring, Mesh, Tree, and Linear (Bus).
-- **Real-Time Visualization** — Watch pheromone levels evolve across the network as the algorithm converges on the optimal route.
-- **Animated Packet Simulation** — After optimization, glowing data packets animate along the discovered optimal path.
-- **Device-Aware Nodes** — Network nodes are rendered as real device icons (Router, Switch, Server, Firewall, Endpoint) instead of generic circles.
-- **Interactive Route Display** — The Dominant Route Traversal bar shows the optimized path with device-type icons and status indicators.
+- **GPU-Accelerated ACO**: Ant Colony Optimization compiled and executed on NVIDIA GPUs via Numba CUDA JIT. Falls back to CPU automatically if no GPU is available.
+- **Execution Engine Indicator**: A real-time UI badge prominently displays whether the backend executed using `GPU Accelerated` native kernels or `CPU Fallback`.
+- **Multiple Network Topologies**: Choose from 6 preset topologies: Default, Star, Ring, Mesh, Tree, and Linear (Bus).
+- **Real-Time Visualization**: Watch pheromone levels evolve across the network as the algorithm converges on the optimal route.
+- **Animated Packet Simulation**: After optimization, glowing data packets animate along the discovered optimal path.
+- **Device-Aware Nodes**: Network nodes are rendered as real device icons (Router, Switch, Server, Firewall, Endpoint) instead of generic circles.
+- **Interactive Route Display**: The Dominant Route Traversal bar shows the optimized path with device-type icons and status indicators.
 
 ---
 
@@ -32,7 +32,7 @@ A real-time network routing optimization dashboard that uses **CUDA-accelerated 
 ```
 ├── backend/
 │   ├── app/
-│   │   ├── main.py          # FastAPI server — /optimize endpoint
+│   │   ├── main.py           # FastAPI server
 │   │   └── runner.py         # ACO algorithm (CUDA kernels + CPU fallback)
 │   └── requirements.txt      # Python dependencies
 ├── frontend/
@@ -40,8 +40,8 @@ A real-time network routing optimization dashboard that uses **CUDA-accelerated 
 │   │   └── favicon.svg       # App favicon
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── AlgorithmExplanation.jsx   # Math formulas panel
-│   │   │   ├── Controls.jsx               # Optimization controls
+│   │   │   ├── AlgorithmExplanation.jsx    # Math formulas panel
+│   │   │   ├── Controls.jsx                # Optimization controls
 │   │   │   ├── GraphVisualization.jsx      # Canvas graph + packet animation
 │   │   │   └── TopologySelector.jsx        # Preset topology chooser
 │   │   ├── App.jsx           # Main application component
@@ -121,25 +121,25 @@ Press `Ctrl+C` in both terminal windows to gracefully shut down the FastAPI back
 
 The algorithm simulates ant behavior to discover shortest paths in a weighted graph:
 
-1. **Initialization** — Pheromone levels on all edges are set to a small uniform value.
-2. **Solution Construction** — Each ant builds a path from source to destination using probabilistic selection weighted by pheromone and heuristic (inverse distance):
+1. **Initialization**: Pheromone levels on all edges are set to a small uniform value.
+2. **Solution Construction**: Each ant builds a path from source to destination using probabilistic selection weighted by pheromone and heuristic (inverse distance):
 
    ```
    P_ij = (τ_ij^α × η_ij^β) / Σ(τ^α × η^β)
    ```
 
-3. **Pheromone Update** — Successful ants deposit pheromone proportional to path quality. All edges evaporate:
+3. **Pheromone Update**: Successful ants deposit pheromone proportional to path quality. All edges evaporate:
 
    ```
    τ_ij = (1 - ρ) × τ_ij + Δτ
    ```
 
-4. **Convergence** — After 100 iterations, the highest-pheromone path represents the optimal route.
+4. **Convergence**: After 100 iterations, the highest-pheromone path represents the optimal route.
 
 ### CUDA Acceleration
 
-- **`construct_solutions` kernel** — Each ant runs as a separate GPU thread, building paths in parallel.
-- **`update_pheromones` kernel** — 2D grid maps to the NxN pheromone matrix for parallel evaporation and deposit.
+- **`construct_solutions` kernel**: Each ant runs as a separate GPU thread, building paths in parallel.
+- **`update_pheromones` kernel**: 2D grid maps to the NxN pheromone matrix for parallel evaporation and deposit.
 - If no CUDA device is found, the system transparently falls back to an equivalent CPU implementation.
 
 ---
@@ -207,7 +207,7 @@ Each snapshot is an array of edge objects with updated pheromone values, sampled
 
 ## Performance
 
-The CUDA path runs **ant path construction in parallel** — each of the 32 ants is a separate GPU thread, and the full NxN pheromone matrix is updated via a 2D grid kernel. Below are measured timings on an **NVIDIA GeForce RTX 3050 Ti** (laptop) against an equivalent pure-Python CPU implementation.
+The CUDA path runs **ant path construction in parallel**; each of the 32 ants is a separate GPU thread, and the full NxN pheromone matrix is updated via a 2D grid kernel. Below are measured timings on an **NVIDIA GeForce RTX 3050 Ti** (laptop) against an equivalent pure-Python CPU implementation.
 
 | Graph Configuration          | CPU Time  | GPU Time | Speedup |
 |------------------------------|-----------|----------|---------|
